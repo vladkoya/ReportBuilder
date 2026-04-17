@@ -3,10 +3,512 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Storm Center 5 Report Data Extraction</title>
+    <title>SC5 Report Extraction - Single Page</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: Arial, Helvetica, sans-serif;
+        background: #f6f8fb;
+        color: #111827;
+      }
+      .container {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 2rem 1rem 3rem;
+      }
+      h1 {
+        margin: 0 0 0.6rem;
+      }
+      .subtitle {
+        margin-top: 0;
+        color: #4b5563;
+      }
+      .notice {
+        background: #fff7ed;
+        border: 1px solid #fdba74;
+        border-left: 4px solid #ea580c;
+        border-radius: 10px;
+        padding: 0.75rem;
+        margin-bottom: 1rem;
+        color: #9a3412;
+      }
+      .card {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+      }
+      .field {
+        margin-bottom: 0.85rem;
+      }
+      .field label {
+        display: block;
+        margin-bottom: 0.35rem;
+        font-weight: 600;
+      }
+      .grid {
+        display: grid;
+        gap: 0.85rem;
+        grid-template-columns: 1fr 1fr;
+      }
+      input,
+      select,
+      button {
+        width: 100%;
+        font: inherit;
+        padding: 0.6rem 0.7rem;
+        border-radius: 8px;
+        border: 1px solid #d1d5db;
+      }
+      button {
+        border: none;
+        background: #1d4ed8;
+        color: #ffffff;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: wait;
+      }
+      .hidden {
+        display: none;
+      }
+      .success {
+        border-left: 4px solid #16a34a;
+      }
+      .warning {
+        border-left: 4px solid #d97706;
+      }
+      .error {
+        border-left: 4px solid #dc2626;
+      }
+      .url-list {
+        margin: 0;
+        padding-left: 1.2rem;
+      }
+      .url-list a {
+        word-break: break-all;
+      }
+      pre {
+        margin: 0.5rem 0 0;
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 0.75rem;
+        border-radius: 8px;
+        overflow: auto;
+        max-height: 360px;
+        font-size: 0.85rem;
+      }
+      @media (max-width: 720px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <main class="container">
+      <h1>Storm Center 5 Report Extraction</h1>
+      <p class="subtitle">
+        Single-file HTML app that runs from the repository and executes the extraction workflow.
+      </p>
+
+      <section class="notice">
+        <strong>Important:</strong> Direct browser calls to SC5 API endpoints may require auth and may be
+        blocked by CORS. This page supports both:
+        <br />
+        (1) <strong>Automatic mode</strong> (attempt direct SC5 calls),
+        <br />
+        (2) <strong>Manual mode</strong> (paste deployment ID and interval path to build/fetch final URLs).
+      </section>
+
+      <form id="extract-form" class="card">
+        <div class="field">
+          <label for="environment">Environment</label>
+          <select id="environment">
+            <option value="TEST">TEST</option>
+            <option value="PROD">PROD</option>
+            <option value="CUSTOM">CUSTOM</option>
+          </select>
+        </div>
+
+        <div class="grid">
+          <div class="field">
+            <label for="scInstanceId">scInstanceId</label>
+            <input id="scInstanceId" required />
+          </div>
+          <div class="field">
+            <label for="viewId">viewId</label>
+            <input id="viewId" required />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="reportName">reportName (optional)</label>
+          <input id="reportName" placeholder="e.g. outage summary report" />
+        </div>
+
+        <div class="field">
+          <label for="mode">Run Mode</label>
+          <select id="mode">
+            <option value="auto">Auto (call SC5 APIs directly)</option>
+            <option value="manual">Manual (use provided deployment/interval)</option>
+          </select>
+        </div>
+
+        <div id="manual-fields" class="hidden">
+          <div class="grid">
+            <div class="field">
+              <label for="deploymentId">stormcenterDeploymentId (manual)</label>
+              <input id="deploymentId" placeholder="f1431ece-1521-4b29-b2a7-d892fccc6a27" />
+            </div>
+            <div class="field">
+              <label for="intervalGenerationData">interval_generation_data (manual)</label>
+              <input id="intervalGenerationData" placeholder="data/bd625627-b232-49f3-b16b-b773c8ad0362" />
+            </div>
+          </div>
+          <div class="field">
+            <label for="configurationJson">Configuration JSON (optional, paste full response)</label>
+            <input
+              id="configurationJson"
+              placeholder='{"widgets":[{"source":"public/reports/<id>_report.json"}]}'
+            />
+          </div>
+          <div class="grid">
+            <div class="field">
+              <label for="manualReportSource">Report source override (optional)</label>
+              <input id="manualReportSource" placeholder="public/reports/<report_id>_report.json" />
+            </div>
+            <div class="field">
+              <label for="manualSummarySource">Summary source override (optional)</label>
+              <input id="manualSummarySource" placeholder="public/summary-<n>/data.json" />
+            </div>
+          </div>
+        </div>
+
+        <button id="submit-button" type="submit">Run Extraction</button>
+      </form>
+
+      <section id="status" class="card hidden"></section>
+      <section id="results" class="card hidden"></section>
+    </main>
+
+    <script>
+      const KUBRA_BASE = "https://kubra.io";
+      const ENV_DEFAULTS = {
+        TEST: {
+          scInstanceId: "6efee6dd-5620-4572-ba47-5d7c83a8d41a",
+          viewId: "d0937543-b469-4806-9caa-a8ce44da4ce2",
+        },
+        PROD: {
+          scInstanceId: "877fd1e9-4162-473f-b782-d8a53a85326b",
+          viewId: "a6cee9e4-312b-4b77-9913-2ae371eb860d",
+        },
+      };
+
+      const form = document.getElementById("extract-form");
+      const statusEl = document.getElementById("status");
+      const resultsEl = document.getElementById("results");
+      const submitButton = document.getElementById("submit-button");
+      const environmentSelect = document.getElementById("environment");
+      const modeSelect = document.getElementById("mode");
+      const manualFields = document.getElementById("manual-fields");
+      const scInput = document.getElementById("scInstanceId");
+      const viewInput = document.getElementById("viewId");
+      const reportNameInput = document.getElementById("reportName");
+      const deploymentInput = document.getElementById("deploymentId");
+      const intervalInput = document.getElementById("intervalGenerationData");
+      const configurationJsonInput = document.getElementById("configurationJson");
+      const manualReportSourceInput = document.getElementById("manualReportSource");
+      const manualSummarySourceInput = document.getElementById("manualSummarySource");
+
+      function setStatus(message, mode) {
+        statusEl.className = `card ${mode}`;
+        statusEl.textContent = message;
+        statusEl.classList.remove("hidden");
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
+      }
+
+      function prettyJson(value) {
+        return `<pre>${escapeHtml(JSON.stringify(value, null, 2))}</pre>`;
+      }
+
+      function setResults(html) {
+        resultsEl.innerHTML = html;
+        resultsEl.classList.remove("hidden");
+      }
+
+      function buildCurrentStateUrl(scInstanceId, viewId) {
+        return `${KUBRA_BASE}/stormcenter/api/v1/stormcenters/${scInstanceId}/views/${viewId}/currentState?preview=false`;
+      }
+
+      function buildConfigurationUrl(scInstanceId, viewId, deploymentId) {
+        return `${KUBRA_BASE}/stormcenter/api/v1/stormcenters/${scInstanceId}/views/${viewId}/configuration/${deploymentId}?preview=false`;
+      }
+
+      function buildAssetUrl(intervalGenerationData, source) {
+        const cleanInterval = String(intervalGenerationData || "").replace(/^\/+|\/+$/g, "");
+        const cleanSource = String(source || "").replace(/^\/+/, "");
+        return `${KUBRA_BASE}/${cleanInterval}/${cleanSource}`;
+      }
+
+      function findFirstValueByKey(node, targetKey) {
+        if (Array.isArray(node)) {
+          for (const item of node) {
+            const result = findFirstValueByKey(item, targetKey);
+            if (result !== undefined) return result;
+          }
+          return undefined;
+        }
+
+        if (!node || typeof node !== "object") return undefined;
+        if (Object.prototype.hasOwnProperty.call(node, targetKey)) return node[targetKey];
+
+        for (const value of Object.values(node)) {
+          const result = findFirstValueByKey(value, targetKey);
+          if (result !== undefined) return result;
+        }
+        return undefined;
+      }
+
+      function collectSources(node, output = []) {
+        if (Array.isArray(node)) {
+          node.forEach((item) => collectSources(item, output));
+          return output;
+        }
+        if (!node || typeof node !== "object") return output;
+        if (typeof node.source === "string") output.push(node.source);
+        for (const value of Object.values(node)) collectSources(value, output);
+        return output;
+      }
+
+      function chooseReportSource(sources, reportName) {
+        const reports = [...new Set(sources.filter((s) => /^public\/reports\/.+_report\.json$/i.test(s)))];
+        if (reports.length === 0) return null;
+
+        const needle = String(reportName || "").trim().toLowerCase();
+        if (!needle) return reports[0];
+
+        const named = reports.find((s) => s.toLowerCase().includes(needle));
+        return named || reports[0];
+      }
+
+      function chooseSummarySource(sources) {
+        const summaries = [...new Set(sources.filter((s) => /^public\/summary-\d+\/data\.json$/i.test(s)))];
+        if (summaries.length === 0) return null;
+        return summaries.sort((a, b) => {
+          const aNum = Number((a.match(/^public\/summary-(\d+)\/data\.json$/i) || [])[1] || -1);
+          const bNum = Number((b.match(/^public\/summary-(\d+)\/data\.json$/i) || [])[1] || -1);
+          return bNum - aNum;
+        })[0];
+      }
+
+      async function fetchJson(url) {
+        const response = await fetch(url, { headers: { accept: "application/json" } });
+        const text = await response.text();
+        if (!response.ok) {
+          throw new Error(`Request failed (${response.status}) for ${url}. Response: ${text.slice(0, 240)}`);
+        }
+        return JSON.parse(text);
+      }
+
+      async function fetchJsonBestEffort(url) {
+        try {
+          const response = await fetch(url, { headers: { accept: "application/json" } });
+          const text = await response.text();
+          if (!response.ok) {
+            return { ok: false, status: response.status, url, error: text.slice(0, 240), data: null };
+          }
+          return { ok: true, status: response.status, url, error: null, data: JSON.parse(text) };
+        } catch (error) {
+          return {
+            ok: false,
+            status: null,
+            url,
+            error: error instanceof Error ? error.message : "Unexpected error",
+            data: null,
+          };
+        }
+      }
+
+      function syncEnvironmentInputs() {
+        const env = environmentSelect.value;
+        const defaults = ENV_DEFAULTS[env];
+        if (defaults) {
+          scInput.value = defaults.scInstanceId;
+          viewInput.value = defaults.viewId;
+          scInput.readOnly = true;
+          viewInput.readOnly = true;
+        } else {
+          scInput.readOnly = false;
+          viewInput.readOnly = false;
+        }
+      }
+
+      function syncModeFields() {
+        manualFields.classList.toggle("hidden", modeSelect.value !== "manual");
+      }
+
+      environmentSelect.addEventListener("change", syncEnvironmentInputs);
+      modeSelect.addEventListener("change", syncModeFields);
+      syncEnvironmentInputs();
+      syncModeFields();
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        submitButton.disabled = true;
+        resultsEl.classList.add("hidden");
+
+        try {
+          setStatus("Running extraction workflow...", "success");
+
+          const environment = environmentSelect.value;
+          const scInstanceId = scInput.value.trim();
+          const viewId = viewInput.value.trim();
+          const reportName = reportNameInput.value.trim();
+          const mode = modeSelect.value;
+
+          if (!scInstanceId || !viewId) {
+            throw new Error("scInstanceId and viewId are required.");
+          }
+
+          const currentStateUrl = buildCurrentStateUrl(scInstanceId, viewId);
+          let deploymentId = "";
+          let intervalGenerationData = "";
+          let configuration = null;
+          let configurationUrl = "";
+          let sources = [];
+
+          if (mode === "auto") {
+            let currentState;
+            try {
+              currentState = await fetchJson(currentStateUrl);
+            } catch (error) {
+              throw new Error(
+                "Auto mode could not fetch currentState directly from browser. This is usually auth/CORS related. " +
+                  "Switch to Manual mode and paste deployment/interval values. Root error: " +
+                  (error instanceof Error ? error.message : "unknown")
+              );
+            }
+
+            deploymentId =
+              currentState.stormcenterDeploymentId || findFirstValueByKey(currentState, "stormcenterDeploymentId");
+            intervalGenerationData =
+              currentState?.data?.interval_generation_data ||
+              findFirstValueByKey(currentState, "interval_generation_data");
+
+            if (!deploymentId || !intervalGenerationData) {
+              throw new Error("currentState did not include deploymentId and interval_generation_data.");
+            }
+
+            configurationUrl = buildConfigurationUrl(scInstanceId, viewId, deploymentId);
+            configuration = await fetchJson(configurationUrl);
+            sources = collectSources(configuration);
+          } else {
+            deploymentId = deploymentInput.value.trim();
+            intervalGenerationData = intervalInput.value.trim();
+            if (!deploymentId || !intervalGenerationData) {
+              throw new Error("Manual mode requires both deploymentId and interval_generation_data.");
+            }
+
+            configurationUrl = buildConfigurationUrl(scInstanceId, viewId, deploymentId);
+            const manualConfigJson = configurationJsonInput.value.trim();
+            if (manualConfigJson) {
+              try {
+                configuration = JSON.parse(manualConfigJson);
+                sources = collectSources(configuration);
+              } catch (error) {
+                throw new Error("Configuration JSON in manual mode is not valid JSON.");
+              }
+            } else {
+              try {
+                configuration = await fetchJson(configurationUrl);
+                sources = collectSources(configuration);
+              } catch (error) {
+                sources = [];
+              }
+            }
+          }
+
+          const manualReportSource = manualReportSourceInput.value.trim();
+          const manualSummarySource = manualSummarySourceInput.value.trim();
+          const selectedReportSource =
+            manualReportSource ||
+            chooseReportSource(sources, reportName) ||
+            "public/reports/<report_id>_report.json";
+          const selectedSummarySource =
+            manualSummarySource || chooseSummarySource(sources) || "public/summary-<n>/data.json";
+          const reportUrl = buildAssetUrl(intervalGenerationData, selectedReportSource);
+          const summaryUrl = buildAssetUrl(intervalGenerationData, selectedSummarySource);
+
+          const [reportFetch, summaryFetch] = await Promise.all([
+            fetchJsonBestEffort(reportUrl),
+            fetchJsonBestEffort(summaryUrl),
+          ]);
+
+          const warnings = [];
+          if (!reportFetch.ok) warnings.push("Report JSON was not fetched successfully.");
+          if (!summaryFetch.ok) warnings.push("Summary JSON was not fetched successfully.");
+          if (warnings.length > 0) {
+            setStatus("Workflow completed with warnings. See fetch status below.", "warning");
+          } else {
+            setStatus("Workflow completed successfully.", "success");
+          }
+
+          setResults(`
+            <h2>Workflow Output</h2>
+            <p><strong>Environment:</strong> ${escapeHtml(environment)}</p>
+            <p><strong>Mode:</strong> ${escapeHtml(mode)}</p>
+            <p><strong>stormcenterDeploymentId:</strong> ${escapeHtml(deploymentId)}</p>
+            <p><strong>interval_generation_data:</strong> ${escapeHtml(intervalGenerationData)}</p>
+
+            <h3>Constructed URLs</h3>
+            <ul class="url-list">
+              <li>Current state: <a href="${escapeHtml(currentStateUrl)}" target="_blank" rel="noreferrer">${escapeHtml(currentStateUrl)}</a></li>
+              <li>Configuration: <a href="${escapeHtml(configurationUrl)}" target="_blank" rel="noreferrer">${escapeHtml(configurationUrl)}</a></li>
+              <li>Report JSON: <a href="${escapeHtml(reportUrl)}" target="_blank" rel="noreferrer">${escapeHtml(reportUrl)}</a></li>
+              <li>Summary JSON: <a href="${escapeHtml(summaryUrl)}" target="_blank" rel="noreferrer">${escapeHtml(summaryUrl)}</a></li>
+            </ul>
+
+            <h3>Selected Sources</h3>
+            ${prettyJson({
+              reportSource: selectedReportSource,
+              summarySource: selectedSummarySource,
+              sourceCount: sources.length,
+            })}
+
+            <h3>Data Fetch Status</h3>
+            ${prettyJson({
+              report: { ok: reportFetch.ok, status: reportFetch.status, url: reportFetch.url, error: reportFetch.error },
+              summary: { ok: summaryFetch.ok, status: summaryFetch.status, url: summaryFetch.url, error: summaryFetch.error },
+              warnings,
+            })}
+
+            <h3>Report Data</h3>
+            ${prettyJson(reportFetch.data)}
+
+            <h3>Summary Data</h3>
+            ${prettyJson(summaryFetch.data)}
+          `);
+        } catch (error) {
+          setStatus(error instanceof Error ? error.message : "Unexpected error", "error");
+        } finally {
+          submitButton.disabled = false;
+        }
+      });
+    </script>
   </body>
 </html>

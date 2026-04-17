@@ -1,48 +1,46 @@
 # ReportBuilder
 
-React web application for the **Storm Center 5 report extraction workflow**.
+Single-page HTML app for the **Storm Center 5 report extraction workflow**.
 
-It implements the full process in the guide:
+Everything is in one file: `index.html` (HTML, CSS, and JavaScript).
+
+## Use directly from the GitHub repo
+
+You can run it without installing dependencies by opening the file directly.
+
+### Option A: download and open locally
+1. Download `index.html` from this repo.
+2. Open it in your browser.
+
+### Option B: use raw GitHub URL
+Use the raw file URL format:
+
+`https://raw.githubusercontent.com/<owner>/<repo>/<branch>/index.html`
+
+Save that response as a local `.html` file, then open it in your browser.
+
+## What the page does
+
+The page supports the full guide workflow:
 
 1. Call `currentState`
 2. Extract `stormcenterDeploymentId` and `interval_generation_data`
 3. Call `configuration`
-4. Extract report and summary `source` paths
+4. Extract report and summary source paths
 5. Build final `report.json` and `data.json` URLs
-6. Fetch and display both JSON payloads
+6. Fetch and display data files
 
-## Built-in environments
+## Important browser limitation
 
-- **TEST**
-  - `scInstanceId`: `6efee6dd-5620-4572-ba47-5d7c83a8d41a`
-  - `viewId`: `d0937543-b469-4806-9caa-a8ce44da4ce2`
-- **PROD**
-  - `scInstanceId`: `877fd1e9-4162-473f-b782-d8a53a85326b`
-  - `viewId`: `a6cee9e4-312b-4b77-9913-2ae371eb860d`
+Direct browser calls to:
+- `https://kubra.io/stormcenter/api/v1/.../currentState`
+- `https://kubra.io/stormcenter/api/v1/.../configuration/...`
 
-You can also select **CUSTOM** in the UI and enter your own IDs.
+may fail due to authentication/CORS restrictions (for example `401`).
 
-## Run locally
+The page includes a **Manual mode** so you can still:
+- paste `stormcenterDeploymentId`
+- paste `interval_generation_data`
+- paste configuration JSON
 
-```bash
-npm install
-npm run dev
-```
-
-Open: `http://localhost:5173`
-
-The React dev server proxies `/api/*` requests to the Express backend on port `3000`.
-
-### Production-style run
-
-```bash
-npm run build
-npm start
-```
-
-Then open: `http://localhost:3000`
-
-## Notes
-
-- `reportName` is optional. If provided, the app scores configuration candidates and picks the best matching report source.
-- API calls to Storm Center are performed server-side (Express), then displayed in the React UI.
+and then continue steps 3-6 (source extraction, URL construction, data fetch).
