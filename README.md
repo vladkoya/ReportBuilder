@@ -35,12 +35,3 @@ The page supports the full guide workflow:
 Direct browser calls to:
 - `https://kubra.io/stormcenter/api/v1/.../currentState`
 - `https://kubra.io/stormcenter/api/v1/.../configuration/...`
-
-may fail due to authentication/CORS restrictions (for example `401`).
-
-The page includes a **Manual mode** so you can still:
-- paste `stormcenterDeploymentId`
-- paste `interval_generation_data`
-- paste configuration JSON
-
-and then continue steps 3-6 (source extraction, URL construction, data fetch).
