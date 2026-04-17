@@ -115,44 +115,6 @@
           </div>
         </div>
 
-        <div class="field">
-          <label for="mode">Run Mode</label>
-          <select id="mode">
-            <option value="auto">Auto (call SC5 APIs directly)</option>
-            <option value="manual">Manual (use provided deployment/interval)</option>
-          </select>
-        </div>
-
-        <div id="manual-fields" class="hidden">
-          <div class="grid">
-            <div class="field">
-              <label for="deploymentId">stormcenterDeploymentId (manual)</label>
-              <input id="deploymentId" placeholder="f1431ece-1521-4b29-b2a7-d892fccc6a27" />
-            </div>
-            <div class="field">
-              <label for="intervalGenerationData">interval_generation_data (manual)</label>
-              <input id="intervalGenerationData" placeholder="data/bd625627-b232-49f3-b16b-b773c8ad0362" />
-            </div>
-          </div>
-          <div class="field">
-            <label for="configurationJson">Configuration JSON (optional, paste full response)</label>
-            <input
-              id="configurationJson"
-              placeholder='{"widgets":[{"source":"public/reports/<id>_report.json"}]}'
-            />
-          </div>
-          <div class="grid">
-            <div class="field">
-              <label for="manualReportSource">Report source override (optional)</label>
-              <input id="manualReportSource" placeholder="public/reports/<report_id>_report.json" />
-            </div>
-            <div class="field">
-              <label for="manualSummarySource">Summary source override (optional)</label>
-              <input id="manualSummarySource" placeholder="public/summary-<n>/data.json" />
-            </div>
-          </div>
-        </div>
-
         <button id="submit-button" type="submit">Run Extraction</button>
       </form>
 
@@ -169,15 +131,8 @@
       const statusEl = document.getElementById("status");
       const resultsEl = document.getElementById("results");
       const submitButton = document.getElementById("submit-button");
-      const modeSelect = document.getElementById("mode");
-      const manualFields = document.getElementById("manual-fields");
       const scInput = document.getElementById("scInstanceId");
       const viewInput = document.getElementById("viewId");
-      const deploymentInput = document.getElementById("deploymentId");
-      const intervalInput = document.getElementById("intervalGenerationData");
-      const configurationJsonInput = document.getElementById("configurationJson");
-      const manualReportSourceInput = document.getElementById("manualReportSource");
-      const manualSummarySourceInput = document.getElementById("manualSummarySource");
 
       function setStatus(message, mode) {
         statusEl.className = `card ${mode}`;
@@ -246,10 +201,8 @@
         return output;
       }
 
-      function chooseReportSource(sources) {
-        const reports = [...new Set(sources.filter((s) => /^public\/reports\/.+_report\.json$/i.test(s)))];
-        if (reports.length === 0) return null;
-        return reports[0];
+      function getReportSources(sources) {
+        return [...new Set(sources.filter((s) => /^public\/reports\/.+_report\.json$/i.test(s)))];
       }
 
       function chooseSummarySource(sources) {
@@ -290,14 +243,8 @@
         }
       }
 
-      function syncModeFields() {
-        manualFields.classList.toggle("hidden", modeSelect.value !== "manual");
-      }
-
-      modeSelect.addEventListener("change", syncModeFields);
       scInput.value = DEFAULT_SC_INSTANCE_ID;
       viewInput.value = DEFAULT_VIEW_ID;
-      syncModeFields();
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -309,88 +256,70 @@
 
           const scInstanceId = scInput.value.trim();
           const viewId = viewInput.value.trim();
-          const mode = modeSelect.value;
 
           if (!scInstanceId || !viewId) {
             throw new Error("scInstanceId and viewId are required.");
           }
 
           const currentStateUrl = buildCurrentStateUrl(scInstanceId, viewId);
-          let deploymentId = "";
-          let intervalGenerationData = "";
-          let configuration = null;
-          let configurationUrl = "";
-          let sources = [];
-
-          if (mode === "auto") {
-            let currentState;
-            try {
-              currentState = await fetchJson(currentStateUrl);
-            } catch (error) {
-              throw new Error(
-                "Auto mode could not fetch currentState directly from browser. This is usually auth/CORS related. " +
-                  "Switch to Manual mode and paste deployment/interval values. Root error: " +
-                  (error instanceof Error ? error.message : "unknown")
-              );
-            }
-
-            deploymentId =
-              currentState.stormcenterDeploymentId || findFirstValueByKey(currentState, "stormcenterDeploymentId");
-            intervalGenerationData =
-              currentState?.data?.interval_generation_data ||
-              findFirstValueByKey(currentState, "interval_generation_data");
-
-            if (!deploymentId || !intervalGenerationData) {
-              throw new Error("currentState did not include deploymentId and interval_generation_data.");
-            }
-
-            configurationUrl = buildConfigurationUrl(scInstanceId, viewId, deploymentId);
-            configuration = await fetchJson(configurationUrl);
-            sources = collectSources(configuration);
-          } else {
-            deploymentId = deploymentInput.value.trim();
-            intervalGenerationData = intervalInput.value.trim();
-            if (!deploymentId || !intervalGenerationData) {
-              throw new Error("Manual mode requires both deploymentId and interval_generation_data.");
-            }
-
-            configurationUrl = buildConfigurationUrl(scInstanceId, viewId, deploymentId);
-            const manualConfigJson = configurationJsonInput.value.trim();
-            if (manualConfigJson) {
-              try {
-                configuration = JSON.parse(manualConfigJson);
-                sources = collectSources(configuration);
-              } catch (error) {
-                throw new Error("Configuration JSON in manual mode is not valid JSON.");
-              }
-            } else {
-              try {
-                configuration = await fetchJson(configurationUrl);
-                sources = collectSources(configuration);
-              } catch (error) {
-                sources = [];
-              }
-            }
+          let currentState;
+          try {
+            currentState = await fetchJson(currentStateUrl);
+          } catch (error) {
+            throw new Error(
+              "Could not fetch currentState directly from browser. This is usually auth/CORS related. Root error: " +
+                (error instanceof Error ? error.message : "unknown")
+            );
           }
 
-          const manualReportSource = manualReportSourceInput.value.trim();
-          const manualSummarySource = manualSummarySourceInput.value.trim();
-          const selectedReportSource =
-            manualReportSource ||
-            chooseReportSource(sources) ||
-            "public/reports/<report_id>_report.json";
-          const selectedSummarySource =
-            manualSummarySource || chooseSummarySource(sources) || "public/summary-<n>/data.json";
-          const reportUrl = buildAssetUrl(intervalGenerationData, selectedReportSource);
+          const deploymentId =
+            currentState.stormcenterDeploymentId || findFirstValueByKey(currentState, "stormcenterDeploymentId");
+          const intervalGenerationData =
+            currentState?.data?.interval_generation_data ||
+            findFirstValueByKey(currentState, "interval_generation_data");
+
+          if (!deploymentId || !intervalGenerationData) {
+            throw new Error("currentState did not include deploymentId and interval_generation_data.");
+          }
+
+          const configurationUrl = buildConfigurationUrl(scInstanceId, viewId, deploymentId);
+          const configuration = await fetchJson(configurationUrl);
+          const sources = collectSources(configuration);
+          const reportSources = getReportSources(sources);
+          const selectedSummarySource = chooseSummarySource(sources);
+
+          if (reportSources.length === 0) {
+            throw new Error("No report sources matching *_report.json were found in configuration.");
+          }
+          if (!selectedSummarySource) {
+            throw new Error("No summary source matching public/summary-<n>/data.json was found in configuration.");
+          }
+
+          const reportUrls = reportSources.map((source) => buildAssetUrl(intervalGenerationData, source));
+          const selectedReportSource = reportSources[0];
+          const additionalReportSources = reportSources.slice(1);
           const summaryUrl = buildAssetUrl(intervalGenerationData, selectedSummarySource);
 
-          const [reportFetch, summaryFetch] = await Promise.all([
-            fetchJsonBestEffort(reportUrl),
-            fetchJsonBestEffort(summaryUrl),
-          ]);
+          const reportFetches = await Promise.all(reportUrls.map((url) => fetchJsonBestEffort(url)));
+          const primaryReportFetch = reportFetches[0];
+          const summaryFetch = await fetchJsonBestEffort(summaryUrl);
+          const additionalReportResults = reportFetches.slice(1);
+          const additionalReportData = additionalReportResults.map((result, index) => ({
+            source: additionalReportSources[index],
+            url: result.url,
+            ok: result.ok,
+            status: result.status,
+            error: result.error,
+            data: result.data,
+          }));
 
           const warnings = [];
-          if (!reportFetch.ok) warnings.push("Report JSON was not fetched successfully.");
+          if (!primaryReportFetch.ok) warnings.push("Primary report JSON was not fetched successfully.");
+          additionalReportResults.forEach((result, index) => {
+            if (!result.ok) {
+              warnings.push(`Additional report ${additionalReportSources[index]} was not fetched successfully.`);
+            }
+          });
           if (!summaryFetch.ok) warnings.push("Summary JSON was not fetched successfully.");
           if (warnings.length > 0) {
             setStatus("Workflow completed with warnings. See fetch status below.", "warning");
@@ -400,7 +329,6 @@
 
           setResults(`
             <h2>Workflow Output</h2>
-            <p><strong>Mode:</strong> ${escapeHtml(mode)}</p>
             <p><strong>stormcenterDeploymentId:</strong> ${escapeHtml(deploymentId)}</p>
             <p><strong>interval_generation_data:</strong> ${escapeHtml(intervalGenerationData)}</p>
 
@@ -408,26 +336,48 @@
             <ul class="url-list">
               <li>Current state: <a href="${escapeHtml(currentStateUrl)}" target="_blank" rel="noreferrer">${escapeHtml(currentStateUrl)}</a></li>
               <li>Configuration: <a href="${escapeHtml(configurationUrl)}" target="_blank" rel="noreferrer">${escapeHtml(configurationUrl)}</a></li>
-              <li>Report JSON: <a href="${escapeHtml(reportUrl)}" target="_blank" rel="noreferrer">${escapeHtml(reportUrl)}</a></li>
+              ${reportUrls
+                .map(
+                  (url, index) =>
+                    `<li>Report JSON ${index + 1}: <a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(url)}</a></li>`
+                )
+                .join("")}
               <li>Summary JSON: <a href="${escapeHtml(summaryUrl)}" target="_blank" rel="noreferrer">${escapeHtml(summaryUrl)}</a></li>
             </ul>
 
             <h3>Selected Sources</h3>
             ${prettyJson({
-              reportSource: selectedReportSource,
+              allReportSources: reportSources,
+              primaryReportSource: selectedReportSource,
+              additionalReportSources,
               summarySource: selectedSummarySource,
               sourceCount: sources.length,
             })}
 
             <h3>Data Fetch Status</h3>
             ${prettyJson({
-              report: { ok: reportFetch.ok, status: reportFetch.status, url: reportFetch.url, error: reportFetch.error },
+              report: {
+                ok: primaryReportFetch.ok,
+                status: primaryReportFetch.status,
+                url: primaryReportFetch.url,
+                error: primaryReportFetch.error,
+              },
+              additionalReports: additionalReportResults.map((result, index) => ({
+                source: additionalReportSources[index],
+                ok: result.ok,
+                status: result.status,
+                url: result.url,
+                error: result.error,
+              })),
               summary: { ok: summaryFetch.ok, status: summaryFetch.status, url: summaryFetch.url, error: summaryFetch.error },
               warnings,
             })}
 
             <h3>Report Data</h3>
-            ${prettyJson(reportFetch.data)}
+            ${prettyJson(primaryReportFetch.data)}
+
+            <h3>Additional Report Data</h3>
+            ${prettyJson(additionalReportData)}
 
             <h3>Summary Data</h3>
             ${prettyJson(summaryFetch.data)}
