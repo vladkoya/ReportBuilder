@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Storm Center 5 Report Data Extraction</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Storm Center 5 Report Data Extraction</h1>
+      <p class="subtitle">
+        Executes the guide workflow: current state -> configuration -> source extraction -> final URLs ->
+        report and summary fetch.
+      </p>
+
+      <form id="extract-form" class="card">
+        <div class="field">
+          <label for="environment">Environment</label>
+          <select id="environment" name="environment">
+            <option value="TEST">TEST</option>
+            <option value="PROD">PROD</option>
+            <option value="CUSTOM">CUSTOM</option>
+          </select>
+        </div>
+
+        <div class="grid">
+          <div class="field">
+            <label for="scInstanceId">scInstanceId</label>
+            <input id="scInstanceId" name="scInstanceId" required />
+          </div>
+          <div class="field">
+            <label for="viewId">viewId</label>
+            <input id="viewId" name="viewId" required />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="reportName">reportName (optional)</label>
+          <input id="reportName" name="reportName" placeholder="e.g. outage summary report" />
+        </div>
+
+        <button id="submit-button" type="submit">Run Extraction</button>
+      </form>
+
+      <section id="status" class="card hidden"></section>
+      <section id="results" class="card hidden"></section>
+    </main>
+
+    <script src="/app.js" defer></script>
+  </body>
+  </html>
