@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SC5 Report Extraction</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: Arial, Helvetica, sans-serif;
+        background: #f6f8fb;
+        color: #111827;
+      }
+      .container {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 2rem 1rem 3rem;
+      }
+      h1 {
+        margin: 0 0 0.6rem;
+      }
+      .card {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+      }
+      .field {
+        margin-bottom: 0.85rem;
+      }
+      .field label {
+        display: block;
+        margin-bottom: 0.35rem;
+        font-weight: 600;
+      }
+      .grid {
+        display: grid;
+        gap: 0.85rem;
+        grid-template-columns: 1fr 1fr;
+      }
+      input,
+      select,
+      button {
+        width: 100%;
+        font: inherit;
+        padding: 0.6rem 0.7rem;
+        border-radius: 8px;
+        border: 1px solid #d1d5db;
+      }
+      button {
+        border: none;
+        background: #1d4ed8;
+        color: #ffffff;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: wait;
+      }
+      .hidden {
+        display: none;
+      }
+      .success {
+        border-left: 4px solid #16a34a;
+      }
+      .warning {
+        border-left: 4px solid #d97706;
+      }
+      .error {
+        border-left: 4px solid #dc2626;
+      }
+      .url-list {
+        margin: 0;
+        padding-left: 1.2rem;
+      }
+      .url-list a {
+        word-break: break-all;
+      }
+      pre {
+        margin: 0.5rem 0 0;
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 0.75rem;
+        border-radius: 8px;
+        overflow: auto;
+        max-height: 360px;
+        font-size: 0.85rem;
+      }
+      @media (max-width: 720px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <h1>Storm Center 5 Report Extraction</h1>
+
+      <form id="extract-form" class="card">
+        <div class="grid">
+          <div class="field">
+            <label for="scInstanceId">scInstanceId</label>
+            <input id="scInstanceId" required />
+          </div>
+          <div class="field">
+            <label for="viewId">viewId</label>
+            <input id="viewId" required />
+          </div>
+        </div>
+
+        <button id="submit-button" type="submit">Run Extraction</button>
+      </form>
+
+      <section id="status" class="card hidden"></section>
+      <section id="results" class="card hidden"></section>
+    </main>
+
+    <script>
+      const KUBRA_BASE = "https://kubra.io";
+      const DEFAULT_SC_INSTANCE_ID = "6efee6dd-5620-4572-ba47-5d7c83a8d41a";
+      const DEFAULT_VIEW_ID = "d0937543-b469-4806-9caa-a8ce44da4ce2";
+
+      const form = document.getElementById("extract-form");
+      const statusEl = document.getElementById("status");
+      const resultsEl = document.getElementById("results");
+      const submitButton = document.getElementById("submit-button");
+      const scInput = document.getElementById("scInstanceId");
+      const viewInput = document.getElementById("viewId");
+
+      function setStatus(message, mode) {
+        statusEl.className = `card ${mode}`;
+        statusEl.textContent = message;
+        statusEl.classList.remove("hidden");
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
+      }
+
+      function prettyJson(value) {
+        return `<pre>${escapeHtml(JSON.stringify(value, null, 2))}</pre>`;
+      }
+
+      function setResults(html) {
+        resultsEl.innerHTML = html;
+        resultsEl.classList.remove("hidden");
+      }
+
+      function buildCurrentStateUrl(scInstanceId, viewId) {
+        return `${KUBRA_BASE}/stormcenter/api/v1/stormcenters/${scInstanceId}/views/${viewId}/currentState?preview=false`;
+      }
+
+      function buildConfigurationUrl(scInstanceId, viewId, deploymentId) {
+        return `${KUBRA_BASE}/stormcenter/api/v1/stormcenters/${scInstanceId}/views/${viewId}/configuration/${deploymentId}?preview=false`;
+      }
+
+      function buildAssetUrl(intervalGenerationData, source) {
+        const cleanInterval = String(intervalGenerationData || "").replace(/^\/+|\/+$/g, "");
+        const cleanSource = String(source || "").replace(/^\/+/, "");
+        return `${KUBRA_BASE}/${cleanInterval}/${cleanSource}`;
+      }
+
+      function findFirstValueByKey(node, targetKey) {
+        if (Array.isArray(node)) {
+          for (const item of node) {
+            const result = findFirstValueByKey(item, targetKey);
+            if (result !== undefined) return result;
+          }
+          return undefined;
+        }
+
+        if (!node || typeof node !== "object") return undefined;
+        if (Object.prototype.hasOwnProperty.call(node, targetKey)) return node[targetKey];
+
+        for (const value of Object.values(node)) {
+          const result = findFirstValueByKey(value, targetKey);
+          if (result !== undefined) return result;
+        }
+        return undefined;
+      }
+
+      function collectSources(node, output = []) {
+        if (Array.isArray(node)) {
+          node.forEach((item) => collectSources(item, output));
+          return output;
+        }
+        if (!node || typeof node !== "object") return output;
+        if (typeof node.source === "string") output.push(node.source);
+        for (const value of Object.values(node)) collectSources(value, output);
+        return output;
+      }
+
+      function getReportSources(sources) {
+        return [...new Set(sources.filter((s) => /^public\/reports\/.+_report\.json$/i.test(s)))];
+      }
+
+      function chooseSummarySource(sources) {
+        const summaries = [...new Set(sources.filter((s) => /^public\/summary-\d+\/data\.json$/i.test(s)))];
+        if (summaries.length === 0) return null;
+        return summaries.sort((a, b) => {
+          const aNum = Number((a.match(/^public\/summary-(\d+)\/data\.json$/i) || [])[1] || -1);
+          const bNum = Number((b.match(/^public\/summary-(\d+)\/data\.json$/i) || [])[1] || -1);
+          return bNum - aNum;
+        })[0];
+      }
+
+      async function fetchJson(url) {
+        const response = await fetch(url, { headers: { accept: "application/json" } });
+        const text = await response.text();
+        if (!response.ok) {
+          throw new Error(`Request failed (${response.status}) for ${url}. Response: ${text.slice(0, 240)}`);
+        }
+        return JSON.parse(text);
+      }
+
+      async function fetchJsonBestEffort(url) {
+        try {
+          const response = await fetch(url, { headers: { accept: "application/json" } });
+          const text = await response.text();
+          if (!response.ok) {
+            return { ok: false, status: response.status, url, error: text.slice(0, 240), data: null };
+          }
+          return { ok: true, status: response.status, url, error: null, data: JSON.parse(text) };
+        } catch (error) {
+          return {
+            ok: false,
+            status: null,
+            url,
+            error: error instanceof Error ? error.message : "Unexpected error",
+            data: null,
+          };
+        }
+      }
+
+      scInput.value = DEFAULT_SC_INSTANCE_ID;
+      viewInput.value = DEFAULT_VIEW_ID;
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        submitButton.disabled = true;
+        resultsEl.classList.add("hidden");
+
+        try {
+          setStatus("Running extraction workflow...", "success");
+
+          const scInstanceId = scInput.value.trim();
+          const viewId = viewInput.value.trim();
+
+          if (!scInstanceId || !viewId) {
+            throw new Error("scInstanceId and viewId are required.");
+          }
+
+          const currentStateUrl = buildCurrentStateUrl(scInstanceId, viewId);
+          let currentState;
+          try {
+            currentState = await fetchJson(currentStateUrl);
+          } catch (error) {
+            throw new Error(
+              "Could not fetch currentState directly from browser. This is usually auth/CORS related. Root error: " +
+                (error instanceof Error ? error.message : "unknown")
+            );
+          }
+
+          const deploymentId =
+            currentState.stormcenterDeploymentId || findFirstValueByKey(currentState, "stormcenterDeploymentId");
+          const intervalGenerationData =
+            currentState?.data?.interval_generation_data ||
+            findFirstValueByKey(currentState, "interval_generation_data");
+
+          if (!deploymentId || !intervalGenerationData) {
+            throw new Error("currentState did not include deploymentId and interval_generation_data.");
+          }
+
+          const configurationUrl = buildConfigurationUrl(scInstanceId, viewId, deploymentId);
+          const configuration = await fetchJson(configurationUrl);
+          const sources = collectSources(configuration);
+          const reportSources = getReportSources(sources);
+          const selectedSummarySource = chooseSummarySource(sources);
+
+          if (reportSources.length === 0) {
+            throw new Error("No report sources matching *_report.json were found in configuration.");
+          }
+          if (!selectedSummarySource) {
+            throw new Error("No summary source matching public/summary-<n>/data.json was found in configuration.");
+          }
+
+          const reportUrls = reportSources.map((source) => buildAssetUrl(intervalGenerationData, source));
+          const selectedReportSource = reportSources[0];
+          const additionalReportSources = reportSources.slice(1);
+          const summaryUrl = buildAssetUrl(intervalGenerationData, selectedSummarySource);
+
+          const reportFetches = await Promise.all(reportUrls.map((url) => fetchJsonBestEffort(url)));
+          const primaryReportFetch = reportFetches[0];
+          const summaryFetch = await fetchJsonBestEffort(summaryUrl);
+          const additionalReportResults = reportFetches.slice(1);
+          const additionalReportData = additionalReportResults.map((result, index) => ({
+            source: additionalReportSources[index],
+            url: result.url,
+            ok: result.ok,
+            status: result.status,
+            error: result.error,
+            data: result.data,
+          }));
+
+          const warnings = [];
+          if (!primaryReportFetch.ok) warnings.push("Primary report JSON was not fetched successfully.");
+          additionalReportResults.forEach((result, index) => {
+            if (!result.ok) {
+              warnings.push(`Additional report ${additionalReportSources[index]} was not fetched successfully.`);
+            }
+          });
+          if (!summaryFetch.ok) warnings.push("Summary JSON was not fetched successfully.");
+          if (warnings.length > 0) {
+            setStatus("Workflow completed with warnings. See fetch status below.", "warning");
+          } else {
+            setStatus("Workflow completed successfully.", "success");
+          }
+
+          setResults(`
+            <h2>Workflow Output</h2>
+            <p><strong>stormcenterDeploymentId:</strong> ${escapeHtml(deploymentId)}</p>
+            <p><strong>interval_generation_data:</strong> ${escapeHtml(intervalGenerationData)}</p>
+
+            <h3>Constructed URLs</h3>
+            <ul class="url-list">
+              <li>Current state: <a href="${escapeHtml(currentStateUrl)}" target="_blank" rel="noreferrer">${escapeHtml(currentStateUrl)}</a></li>
+              <li>Configuration: <a href="${escapeHtml(configurationUrl)}" target="_blank" rel="noreferrer">${escapeHtml(configurationUrl)}</a></li>
+              ${reportUrls
+                .map(
+                  (url, index) =>
+                    `<li>Report JSON ${index + 1}: <a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(url)}</a></li>`
+                )
+                .join("")}
+              <li>Summary JSON: <a href="${escapeHtml(summaryUrl)}" target="_blank" rel="noreferrer">${escapeHtml(summaryUrl)}</a></li>
+            </ul>
+
+            <h3>Selected Sources</h3>
+            ${prettyJson({
+              allReportSources: reportSources,
+              primaryReportSource: selectedReportSource,
+              additionalReportSources,
+              summarySource: selectedSummarySource,
+              sourceCount: sources.length,
+            })}
+
+            <h3>Data Fetch Status</h3>
+            ${prettyJson({
+              report: {
+                ok: primaryReportFetch.ok,
+                status: primaryReportFetch.status,
+                url: primaryReportFetch.url,
+                error: primaryReportFetch.error,
+              },
+              additionalReports: additionalReportResults.map((result, index) => ({
+                source: additionalReportSources[index],
+                ok: result.ok,
+                status: result.status,
+                url: result.url,
+                error: result.error,
+              })),
+              summary: { ok: summaryFetch.ok, status: summaryFetch.status, url: summaryFetch.url, error: summaryFetch.error },
+              warnings,
+            })}
+
+            <h3>Report Data</h3>
+            ${prettyJson(primaryReportFetch.data)}
+
+            <h3>Additional Report Data</h3>
+            ${prettyJson(additionalReportData)}
+
+            <h3>Summary Data</h3>
+            ${prettyJson(summaryFetch.data)}
+          `);
+        } catch (error) {
+          setStatus(error instanceof Error ? error.message : "Unexpected error", "error");
+        } finally {
+          submitButton.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>
