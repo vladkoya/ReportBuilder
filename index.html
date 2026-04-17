@@ -22,19 +22,6 @@
       h1 {
         margin: 0 0 0.6rem;
       }
-      .subtitle {
-        margin-top: 0;
-        color: #4b5563;
-      }
-      .notice {
-        background: #fff7ed;
-        border: 1px solid #fdba74;
-        border-left: 4px solid #ea580c;
-        border-radius: 10px;
-        padding: 0.75rem;
-        margin-bottom: 1rem;
-        color: #9a3412;
-      }
       .card {
         background: #ffffff;
         border: 1px solid #e5e7eb;
@@ -115,29 +102,8 @@
   <body>
     <main class="container">
       <h1>Storm Center 5 Report Extraction</h1>
-      <p class="subtitle">
-        Single-file HTML app that runs from the repository and executes the extraction workflow.
-      </p>
-
-      <section class="notice">
-        <strong>Important:</strong> Direct browser calls to SC5 API endpoints may require auth and may be
-        blocked by CORS. This page supports both:
-        <br />
-        (1) <strong>Automatic mode</strong> (attempt direct SC5 calls),
-        <br />
-        (2) <strong>Manual mode</strong> (paste deployment ID and interval path to build/fetch final URLs).
-      </section>
 
       <form id="extract-form" class="card">
-        <div class="field">
-          <label for="environment">Environment</label>
-          <select id="environment">
-            <option value="TEST">TEST</option>
-            <option value="PROD">PROD</option>
-            <option value="CUSTOM">CUSTOM</option>
-          </select>
-        </div>
-
         <div class="grid">
           <div class="field">
             <label for="scInstanceId">scInstanceId</label>
@@ -147,11 +113,6 @@
             <label for="viewId">viewId</label>
             <input id="viewId" required />
           </div>
-        </div>
-
-        <div class="field">
-          <label for="reportName">reportName (optional)</label>
-          <input id="reportName" placeholder="e.g. outage summary report" />
         </div>
 
         <div class="field">
@@ -201,27 +162,17 @@
 
     <script>
       const KUBRA_BASE = "https://kubra.io";
-      const ENV_DEFAULTS = {
-        TEST: {
-          scInstanceId: "6efee6dd-5620-4572-ba47-5d7c83a8d41a",
-          viewId: "d0937543-b469-4806-9caa-a8ce44da4ce2",
-        },
-        PROD: {
-          scInstanceId: "877fd1e9-4162-473f-b782-d8a53a85326b",
-          viewId: "a6cee9e4-312b-4b77-9913-2ae371eb860d",
-        },
-      };
+      const DEFAULT_SC_INSTANCE_ID = "6efee6dd-5620-4572-ba47-5d7c83a8d41a";
+      const DEFAULT_VIEW_ID = "d0937543-b469-4806-9caa-a8ce44da4ce2";
 
       const form = document.getElementById("extract-form");
       const statusEl = document.getElementById("status");
       const resultsEl = document.getElementById("results");
       const submitButton = document.getElementById("submit-button");
-      const environmentSelect = document.getElementById("environment");
       const modeSelect = document.getElementById("mode");
       const manualFields = document.getElementById("manual-fields");
       const scInput = document.getElementById("scInstanceId");
       const viewInput = document.getElementById("viewId");
-      const reportNameInput = document.getElementById("reportName");
       const deploymentInput = document.getElementById("deploymentId");
       const intervalInput = document.getElementById("intervalGenerationData");
       const configurationJsonInput = document.getElementById("configurationJson");
@@ -295,15 +246,10 @@
         return output;
       }
 
-      function chooseReportSource(sources, reportName) {
+      function chooseReportSource(sources) {
         const reports = [...new Set(sources.filter((s) => /^public\/reports\/.+_report\.json$/i.test(s)))];
         if (reports.length === 0) return null;
-
-        const needle = String(reportName || "").trim().toLowerCase();
-        if (!needle) return reports[0];
-
-        const named = reports.find((s) => s.toLowerCase().includes(needle));
-        return named || reports[0];
+        return reports[0];
       }
 
       function chooseSummarySource(sources) {
@@ -344,27 +290,13 @@
         }
       }
 
-      function syncEnvironmentInputs() {
-        const env = environmentSelect.value;
-        const defaults = ENV_DEFAULTS[env];
-        if (defaults) {
-          scInput.value = defaults.scInstanceId;
-          viewInput.value = defaults.viewId;
-          scInput.readOnly = true;
-          viewInput.readOnly = true;
-        } else {
-          scInput.readOnly = false;
-          viewInput.readOnly = false;
-        }
-      }
-
       function syncModeFields() {
         manualFields.classList.toggle("hidden", modeSelect.value !== "manual");
       }
 
-      environmentSelect.addEventListener("change", syncEnvironmentInputs);
       modeSelect.addEventListener("change", syncModeFields);
-      syncEnvironmentInputs();
+      scInput.value = DEFAULT_SC_INSTANCE_ID;
+      viewInput.value = DEFAULT_VIEW_ID;
       syncModeFields();
 
       form.addEventListener("submit", async (event) => {
@@ -375,10 +307,8 @@
         try {
           setStatus("Running extraction workflow...", "success");
 
-          const environment = environmentSelect.value;
           const scInstanceId = scInput.value.trim();
           const viewId = viewInput.value.trim();
-          const reportName = reportNameInput.value.trim();
           const mode = modeSelect.value;
 
           if (!scInstanceId || !viewId) {
@@ -447,7 +377,7 @@
           const manualSummarySource = manualSummarySourceInput.value.trim();
           const selectedReportSource =
             manualReportSource ||
-            chooseReportSource(sources, reportName) ||
+            chooseReportSource(sources) ||
             "public/reports/<report_id>_report.json";
           const selectedSummarySource =
             manualSummarySource || chooseSummarySource(sources) || "public/summary-<n>/data.json";
@@ -470,7 +400,6 @@
 
           setResults(`
             <h2>Workflow Output</h2>
-            <p><strong>Environment:</strong> ${escapeHtml(environment)}</p>
             <p><strong>Mode:</strong> ${escapeHtml(mode)}</p>
             <p><strong>stormcenterDeploymentId:</strong> ${escapeHtml(deploymentId)}</p>
             <p><strong>interval_generation_data:</strong> ${escapeHtml(intervalGenerationData)}</p>
