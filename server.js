@@ -1,8 +1,11 @@
 const express = require("express");
+const fs = require("node:fs");
 const path = require("node:path");
 
 const app = express();
 const port = Number(process.env.PORT) || 3000;
+const distPath = path.join(__dirname, "dist");
+const hasBuiltFrontend = fs.existsSync(distPath);
 
 const KUBRA_BASE_URL = "https://kubra.io";
 const ENVIRONMENTS = {
@@ -17,7 +20,9 @@ const ENVIRONMENTS = {
 };
 
 app.use(express.json({ limit: "1mb" }));
-app.use(express.static(path.join(__dirname, "public")));
+if (hasBuiltFrontend) {
+  app.use(express.static(distPath));
+}
 
 function buildCurrentStateUrl(scInstanceId, viewId) {
   return `${KUBRA_BASE_URL}/stormcenter/api/v1/stormcenters/${scInstanceId}/views/${viewId}/currentState?preview=false`;
@@ -386,6 +391,19 @@ app.post("/api/extract", async (req, res) => {
   }
 });
 
+if (hasBuiltFrontend) {
+  app.get(/^\/(?!api).*/, (req, res) => {
+    res.sendFile(path.join(distPath, "index.html"));
+  });
+}
+
 app.listen(port, () => {
-  console.log(`SC5 extractor app listening on http://localhost:${port}`);
+  if (hasBuiltFrontend) {
+    console.log(`SC5 extractor app listening on http://localhost:${port}`);
+    return;
+  }
+
+  console.log(
+    `SC5 API server listening on http://localhost:${port} (React build not found; use "npm run dev" for local UI or run "npm run build" before "npm start")`
+  );
 });

@@ -1,6 +1,6 @@
 # ReportBuilder
 
-Web application for the **Storm Center 5 report extraction workflow**.
+React web application for the **Storm Center 5 report extraction workflow**.
 
 It implements the full process in the guide:
 
@@ -26,12 +26,23 @@ You can also select **CUSTOM** in the UI and enter your own IDs.
 
 ```bash
 npm install
+npm run dev
+```
+
+Open: `http://localhost:5173`
+
+The React dev server proxies `/api/*` requests to the Express backend on port `3000`.
+
+### Production-style run
+
+```bash
+npm run build
 npm start
 ```
 
-Open: `http://localhost:3000`
+Then open: `http://localhost:3000`
 
 ## Notes
 
 - `reportName` is optional. If provided, the app scores configuration candidates and picks the best matching report source.
-- All API calls are performed server-side (Express), then displayed in the browser UI.
+- API calls to Storm Center are performed server-side (Express), then displayed in the React UI.
